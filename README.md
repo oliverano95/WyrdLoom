@@ -10,7 +10,7 @@ Wyrd Loom is a highly optimized, feature-rich, and fully customizable analog wat
 
 ## 🧰 Built With
 * [CloudPebble](https://cloudpebble.repebble.com/) - Cloud-based IDE.
-* [Pebble SDK]((https://developer.repebble.com/)) - The core C framework.
+* [Pebble SDK](https://developer.repebble.com/) - The core C framework.
 * [Pebble Clay](https://github.com/pebble/clay) - Offline configuration page engine (MIT License).
 
 ## 📜 License
