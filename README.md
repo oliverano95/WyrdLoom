@@ -8,9 +8,10 @@ Wyrd Loom is a highly optimized, feature-rich, and fully customizable analog wat
 * **Extreme Battery Optimization:** Uses off-screen culling, trigonometric caching, and smart hardware polling to ensure maximum battery life.
 * **Theme Import/Export:** Easily share your custom colorways with a Base64 theme code.
 
-## 📸 Screenshots
-*(Pro-tip: Create an `assets` folder in your repo, upload 2 or 3 screenshots of different color themes from the emulator, and link them here!)*
-![Screenshot 1](link-to-image-1) ![Screenshot 2](link-to-image-2)
+## 🧰 Built With
+* [CloudPebble](https://cloudpebble.repebble.com/) - Cloud-based IDE.
+* [Pebble SDK]((https://developer.repebble.com/)) - The core C framework.
+* [Pebble Clay](https://github.com/pebble/clay) - Offline configuration page engine (MIT License).
 
 ## 📜 License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
