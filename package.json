@@ -1,0 +1,52 @@
+{
+    "author": "oliben10@gmail.com",
+    "dependencies": {
+        "pebble-clay": "1.0.4"
+    },
+    "keywords": [],
+    "name": "wyrd-loom",
+    "pebble": {
+        "capabilities": [
+            "location",
+            "configurable",
+            "health"
+        ],
+        "displayName": "Wyrd Loom",
+        "enableMultiJS": true,
+        "messageKeys": [
+            "BackgroundColor",
+            "MinuteHandColor",
+            "HourColor",
+            "MinuteMarkerColor",
+            "HandOverNumbers",
+            "ShowMinuteMarkers",
+            "HandLengthScreenEdge",
+            "HourStyle",
+            "MinuteMarkerInterval",
+            "MinuteMarkerStyle",
+            "SmartHierarchicalMarkers",
+            "CompCircleColor",
+            "CompTextColor",
+            "ShowMinuteBubble",
+            "Complication1",
+            "Complication2",
+            "Complication3",
+            "CompFillColor",
+            "BTDisconnectPattern",
+            "HourPosition"
+        ],
+        "projectType": "native",
+        "resources": {
+            "media": []
+        },
+        "sdkVersion": "3",
+        "targetPlatforms": [
+            "emery"
+        ],
+        "uuid": "6afd3402-b38c-407c-aeaa-911ac6ec3e31",
+        "watchapp": {
+            "watchface": true
+        }
+    },
+    "version": "1.0.0"
+}
