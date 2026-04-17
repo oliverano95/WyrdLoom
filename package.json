@@ -33,11 +33,35 @@
             "Complication3",
             "CompFillColor",
             "BTDisconnectPattern",
-            "HourPosition"
+            "HourPosition",
+            "ThemeMode",
+            "ManualDayTime",
+            "ManualNightTime",
+            "ApiDayHour",
+            "ApiDayMin",
+            "ApiNightHour",
+            "ApiNightMin",
+            "NightBackgroundColor",
+            "NightMinuteHandColor",
+            "NightHourColor",
+            "NightMinuteMarkerColor",
+            "NightCompCircleColor",
+            "NightCompFillColor",
+            "NightCompTextColor"
         ],
         "projectType": "native",
         "resources": {
-            "media": []
+            "media": [
+                {
+                    "file": "images/ICON",
+                    "menuIcon": true,
+                    "name": "ICON",
+                    "targetPlatforms": [
+                        "emery"
+                    ],
+                    "type": "png"
+                }
+            ]
         },
         "sdkVersion": "3",
         "targetPlatforms": [
@@ -48,5 +72,5 @@
             "watchface": true
         }
     },
-    "version": "1.0.0"
+    "version": "1.1.0"
 }
