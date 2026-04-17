@@ -78,11 +78,28 @@ var clayConfig = [
       { "type": "toggle", "messageKey": "HandLengthScreenEdge", "label": "Hand goes to edge", "defaultValue": true }
     ]
   },
+  {
+    "type": "section",
+    "items": [
+      { "type": "heading", "defaultValue": "Tools & Sharing" },
+      { "type": "button", "id": "btn_randomize", "defaultValue": "Randomize Colors" },
+      { "type": "button", "id": "btn_default", "defaultValue": "Restore Default Theme" },
+      { "type": "input", "id": "io_box", "label": "Import / Export Theme Code", "description": "Copy this code to save your theme, or paste a code and click Import to apply it.", "defaultValue": "" },
+      { "type": "button", "id": "btn_export", "defaultValue": "Generate Theme Code" },
+      { "type": "button", "id": "btn_import", "defaultValue": "Import Theme Code" }
+    ]
+  },
   { "type": "submit", "defaultValue": "Save Settings" }
 ];
 
 function customClayJS() {
   var clayConfig = this;
+
+  function getPebbleColor() {
+    var hex = ['00', '55', 'AA', 'FF'];
+    var r = hex[Math.floor(Math.random() * 4)]; var g = hex[Math.floor(Math.random() * 4)]; var b = hex[Math.floor(Math.random() * 4)];
+    return '0x' + r + g + b;
+  }
 
   clayConfig.on(clayConfig.EVENTS.AFTER_BUILD, function() {
     
@@ -97,7 +114,6 @@ function customClayJS() {
     var themeMode = clayConfig.getItemByMessageKey('ThemeMode');
     var manualDay = clayConfig.getItemByMessageKey('ManualDayTime');
     var manualNight = clayConfig.getItemByMessageKey('ManualNightTime');
-    
     var nightHeading = clayConfig.getItemById('heading_night_colors');
     var nightKeys = [
       'NightBackgroundColor', 'NightMinuteHandColor', 'NightHourColor', 
@@ -120,13 +136,11 @@ function customClayJS() {
                 var sunrise = new Date(res.results.sunrise);
                 var sunset = new Date(res.results.sunset);
                 
-                // Format directly into standard HH:MM for the time inputs
                 var sr_h = sunrise.getHours().toString().padStart(2, '0');
                 var sr_m = sunrise.getMinutes().toString().padStart(2, '0');
                 var ss_h = sunset.getHours().toString().padStart(2, '0');
                 var ss_m = sunset.getMinutes().toString().padStart(2, '0');
                 
-                // Magically inject the calculated times directly into the locked UI text boxes!
                 manualDay.set(sr_h + ':' + sr_m);
                 manualNight.set(ss_h + ':' + ss_m);
               }
@@ -141,8 +155,6 @@ function customClayJS() {
 
     function updateThemeUI() {
       var mode = themeMode.get();
-
-      // Handle Manual Time Selectors
       if (mode === "1") {
         manualDay.enable();
         manualNight.enable();
@@ -150,30 +162,96 @@ function customClayJS() {
         manualDay.disable();
         manualNight.disable();
       }
-
-      // Automatically trigger the API fetch if Auto mode is selected
-      if (mode === "2") {
-        fetchLiveSunData();
-      }
-
-      // Handle Night Colors Visibility
+      if (mode === "2") fetchLiveSunData();
       if (mode === "0") {
         if (nightHeading) nightHeading.hide();
-        nightKeys.forEach(function(k) { 
-          var item = clayConfig.getItemByMessageKey(k);
-          if(item) item.hide(); 
-        });
+        nightKeys.forEach(function(k) { var item = clayConfig.getItemByMessageKey(k); if(item) item.hide(); });
       } else {
         if (nightHeading) nightHeading.show();
-        nightKeys.forEach(function(k) { 
-          var item = clayConfig.getItemByMessageKey(k);
-          if(item) item.show(); 
-        });
+        nightKeys.forEach(function(k) { var item = clayConfig.getItemByMessageKey(k); if(item) item.show(); });
       }
     }
 
     updateThemeUI();
     themeMode.on('change', updateThemeUI);
+
+    // --- TOOLS & SHARING ENGINE ---
+    var btnRandomize = clayConfig.getItemById('btn_randomize');
+    var btnDefault = clayConfig.getItemById('btn_default');
+    var btnExport = clayConfig.getItemById('btn_export');
+    var btnImport = clayConfig.getItemById('btn_import');
+    var ioBox = clayConfig.getItemById('io_box');
+
+    var configKeys = [
+      'ThemeMode', 'ManualDayTime', 'ManualNightTime',
+      'BackgroundColor', 'MinuteHandColor', 'HourColor', 'MinuteMarkerColor', 'CompCircleColor', 'CompFillColor', 'CompTextColor',
+      'NightBackgroundColor', 'NightMinuteHandColor', 'NightHourColor', 'NightMinuteMarkerColor', 'NightCompCircleColor', 'NightCompFillColor', 'NightCompTextColor',
+      'HourStyle', 'HourPosition', 'MinuteMarkerInterval', 'MinuteMarkerStyle', 'SmartHierarchicalMarkers',
+      'Complication1', 'Complication2', 'Complication3',
+      'BTDisconnectPattern', 'ShowMinuteBubble', 'HandOverNumbers', 'ShowMinuteMarkers', 'HandLengthScreenEdge'
+    ];
+
+    if (btnRandomize) {
+      btnRandomize.on('click', function() {
+        var colorKeys = [
+          'BackgroundColor', 'MinuteHandColor', 'HourColor', 'MinuteMarkerColor', 'CompCircleColor', 'CompFillColor', 'CompTextColor',
+          'NightBackgroundColor', 'NightMinuteHandColor', 'NightHourColor', 'NightMinuteMarkerColor', 'NightCompCircleColor', 'NightCompFillColor', 'NightCompTextColor'
+        ];
+        colorKeys.forEach(function(key) {
+          var item = clayConfig.getItemByMessageKey(key);
+          if (item) item.set(getPebbleColor());
+        });
+      });
+    }
+
+    if (btnDefault) {
+      btnDefault.on('click', function() {
+        var defaultSettings = {
+          "ThemeMode": "0", "ManualDayTime": "07:00", "ManualNightTime": "19:00",
+          "BackgroundColor": "0x000000", "MinuteHandColor": "0xFF5500", "HourColor": "0xFFFFFF", "MinuteMarkerColor": "0xAAAAAA", "CompCircleColor": "0xFF5500", "CompFillColor": "0xFF5500", "CompTextColor": "0xFFFFFF",
+          "NightBackgroundColor": "0x000000", "NightMinuteHandColor": "0x0055AA", "NightHourColor": "0xAAAAAA", "NightMinuteMarkerColor": "0x555555", "NightCompCircleColor": "0x0055AA", "NightCompFillColor": "0x0055AA", "NightCompTextColor": "0xAAAAAA",
+          "HourStyle": "0", "HourPosition": "0", "MinuteMarkerInterval": 15, "MinuteMarkerStyle": "2", "SmartHierarchicalMarkers": true,
+          "Complication1": "3", "Complication2": "0", "Complication3": "0",
+          "BTDisconnectPattern": "2", "ShowMinuteBubble": false, "HandOverNumbers": true, "ShowMinuteMarkers": true, "HandLengthScreenEdge": true
+        };
+        Object.keys(defaultSettings).forEach(function(key) {
+          var item = clayConfig.getItemByMessageKey(key);
+          if (item && item.set) item.set(defaultSettings[key]);
+        });
+        updateThemeUI();
+        if (ioBox) ioBox.set("Defaults Restored! Hit Save Settings.");
+      });
+    }
+
+    if (btnExport) {
+      btnExport.on('click', function() {
+        var settings = {};
+        configKeys.forEach(function(key) {
+          var item = clayConfig.getItemByMessageKey(key);
+          if (item && item.get) settings[key] = item.get();
+        });
+        var code = btoa(JSON.stringify(settings));
+        if (ioBox) ioBox.set(code);
+      });
+    }
+
+    if (btnImport) {
+      btnImport.on('click', function() {
+        try {
+          var code = ioBox.get();
+          if (!code || code === "") return;
+          var settings = JSON.parse(atob(code));
+          Object.keys(settings).forEach(function(key) {
+            var item = clayConfig.getItemByMessageKey(key);
+            if (item && item.set) item.set(settings[key]);
+          });
+          updateThemeUI();
+          ioBox.set("SUCCESS! Hit Save Settings to apply.");
+        } catch (e) {
+          ioBox.set("ERROR: Invalid Theme Code.");
+        }
+      });
+    }
   });
 }
 
@@ -183,7 +261,6 @@ Pebble.addEventListener('showConfiguration', function(e) {
   Pebble.openURL(clay.generateUrl());
 });
 
-// Since the UI now pre-fills the data dynamically, we just send whatever is inside Clay
 Pebble.addEventListener('webviewclosed', function(e) {
   if (e && !e.response) return;
   var dict = clay.getSettings(e.response);
