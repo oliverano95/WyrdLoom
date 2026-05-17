@@ -1,7 +1,7 @@
 {
-    "author": "oliben10@gmail.com",
+    "author": null,
     "dependencies": {
-        "pebble-clay": "1.0.4"
+        "@rebble/clay": "^1.0.8"
     },
     "keywords": [],
     "name": "wyrd-loom",
@@ -56,21 +56,25 @@
                     "file": "images/ICON",
                     "menuIcon": true,
                     "name": "ICON",
-                    "targetPlatforms": [
-                        "emery"
-                    ],
+                    "targetPlatforms": null,
                     "type": "png"
                 }
             ]
         },
         "sdkVersion": "3",
         "targetPlatforms": [
-            "emery"
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "gabbro",
+            "flint"
         ],
         "uuid": "6afd3402-b38c-407c-aeaa-911ac6ec3e31",
         "watchapp": {
             "watchface": true
         }
     },
-    "version": "1.1.0"
+    "version": "1.2.0"
 }

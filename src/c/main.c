@@ -23,7 +23,7 @@ static GColor s_comp_text_color;
 static GColor s_comp_fill_color;
 
 // --- DYNAMIC THEME ENGINE VARIABLES ---
-static int s_theme_mode = 0; // 0=Always Day, 1=Manual, 2=Auto GPS
+static int s_theme_mode = 0; 
 static GColor s_day_colors[7];
 static GColor s_night_colors[7];
 static int s_day_h = 7, s_day_m = 0;
@@ -35,10 +35,11 @@ static bool s_show_minute_markers;
 static bool s_hand_length_screen_edge;
 static bool s_show_minute_bubble;
 static int s_bt_pattern; 
+static bool s_zen_mode = false; // <-- NEW: ZEN MODE STATE
 
 // --- STYLING STATE VARIABLES ---
 static int s_hour_style; 
-static int s_hour_position; // 0=On Top, 1=Outside, 2=Inside
+static int s_hour_position; 
 static int s_marker_interval;
 static int s_marker_style; 
 static bool s_smart_markers;
@@ -72,11 +73,17 @@ static GPoint s_marker_inner_offsets[144];
 static int s_marker_styles[144];
 static int s_num_markers = 0;
 
-// GPath definitions for the elegant elongated triangles
 static GPath *s_triangle_path_out = NULL;
 static GPath *s_triangle_path_in = NULL;
 static const GPathInfo TRIANGLE_OUT_INFO = { .num_points = 3, .points = (GPoint []) {{-6, 16}, {6, 16}, {0, -4}} };
 static const GPathInfo TRIANGLE_IN_INFO = { .num_points = 3, .points = (GPoint []) {{-6, -4}, {6, -4}, {0, 16}} };
+
+// --- NEW: ACCELEROMETER HANDLER (ZEN MODE) ---
+static void tap_handler(AccelAxisType axis, int32_t direction) {
+  // Toggle Zen Mode on flick
+  s_zen_mode = !s_zen_mode;
+  layer_mark_dirty(s_canvas_layer);
+}
 
 static void compass_handler(CompassHeadingData heading_data) {}
 
@@ -95,16 +102,13 @@ static void get_roman_numeral(int num, char* buffer) {
   else strcpy(buffer, "");
 }
 
-// --- DYNAMIC THEME SWITCHER LOGIC ---
 static void apply_current_theme() {
   if (s_theme_mode == 0) {
-    // Single Theme Mode (Always Day Colors)
     s_bg_color = s_day_colors[0]; s_minute_hand_color = s_day_colors[1]; s_hour_color = s_day_colors[2];
     s_marker_color = s_day_colors[3]; s_comp_circle_color = s_day_colors[4]; s_comp_fill_color = s_day_colors[5]; s_comp_text_color = s_day_colors[6];
     return;
   }
 
-  // Calculate if we are in the "Day" window
   int current_minutes = (s_new_hour * 60) + s_new_minute;
   int day_start_minutes = (s_day_h * 60) + s_day_m;
   int night_start_minutes = (s_night_h * 60) + s_night_m;
@@ -127,19 +131,16 @@ static void apply_current_theme() {
 
 static void precalculate_geometry() {
   int r_hours = VIRTUAL_CLOCK_RADIUS;
-  if (s_hour_position == 1) r_hours = VIRTUAL_CLOCK_RADIUS + 34; // Shift Outside
-  else if (s_hour_position == 2) r_hours = VIRTUAL_CLOCK_RADIUS - 34; // Shift Inside
+  if (s_hour_position == 1) r_hours = VIRTUAL_CLOCK_RADIUS + 34;
+  else if (s_hour_position == 2) r_hours = VIRTUAL_CLOCK_RADIUS - 34;
 
   for (int h = 0; h < 12; h++) {
     int32_t angle = (h * 60) * TRIG_MAX_ANGLE / 720; 
     int32_t sin_a = sin_lookup(angle);
     int32_t cos_a = cos_lookup(angle);
     
-    // Positions for the text
     s_hour_offsets[h].x = (sin_a * r_hours) / TRIG_MAX_RATIO;
     s_hour_offsets[h].y = -(cos_a * r_hours) / TRIG_MAX_RATIO;
-
-    // Anchor points for the triangles (always anchored to the track)
     s_triangle_centers[h].x = (sin_a * VIRTUAL_CLOCK_RADIUS) / TRIG_MAX_RATIO;
     s_triangle_centers[h].y = -(cos_a * VIRTUAL_CLOCK_RADIUS) / TRIG_MAX_RATIO;
   }
@@ -147,7 +148,7 @@ static void precalculate_geometry() {
   s_num_markers = 0;
   if (s_show_minute_markers && s_marker_interval >= 5) {
     for (int m = 0; m < 720; m += s_marker_interval) {
-      if (m % 60 == 0) continue; // Skip full hours (either text or triangle goes here)
+      if (m % 60 == 0) continue; 
       
       int32_t angle = m * TRIG_MAX_ANGLE / 720;
       int style = s_marker_style;
@@ -162,7 +163,6 @@ static void precalculate_geometry() {
       if (style != -1) {
         int32_t r_outer = VIRTUAL_CLOCK_RADIUS;
         int32_t r_inner = (style == 2) ? VIRTUAL_CLOCK_RADIUS - 6 : VIRTUAL_CLOCK_RADIUS - 12;
-        
         if (style == 0 || style == 1) r_inner = r_outer - ((style == 0) ? 2 : 4); 
 
         s_marker_outer_offsets[s_num_markers].x = (sin_lookup(angle) * r_outer) / TRIG_MAX_RATIO;
@@ -220,10 +220,8 @@ static void update_cached_data() {
 }
 
 static void inbox_received_handler(DictionaryIterator *iter, void *context) {
-  // --- THEME SETTINGS ---
   Tuple *t_mode = dict_find(iter, MESSAGE_KEY_ThemeMode); if(t_mode) { s_theme_mode = atoi(t_mode->value->cstring); persist_write_int(MESSAGE_KEY_ThemeMode, s_theme_mode); }
 
-// Extract Theme Times (JS now handles API injection, so the watch just reads these fields)
   Tuple *t_man_day = dict_find(iter, MESSAGE_KEY_ManualDayTime); 
   if(t_man_day && strlen(t_man_day->value->cstring) >= 5) {
       char *s = t_man_day->value->cstring;
@@ -240,7 +238,6 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
       if(s_theme_mode == 1 || s_theme_mode == 2) { s_night_h = h; s_night_m = m; }
   }
 
-  // --- DAY COLORS ---
   Tuple *c1 = dict_find(iter, MESSAGE_KEY_BackgroundColor); if(c1) { s_day_colors[0] = GColorFromHEX(c1->value->int32); persist_write_int(MESSAGE_KEY_BackgroundColor, s_day_colors[0].argb); }
   Tuple *c2 = dict_find(iter, MESSAGE_KEY_MinuteHandColor); if(c2) { s_day_colors[1] = GColorFromHEX(c2->value->int32); persist_write_int(MESSAGE_KEY_MinuteHandColor, s_day_colors[1].argb); }
   Tuple *c3 = dict_find(iter, MESSAGE_KEY_HourColor); if(c3) { s_day_colors[2] = GColorFromHEX(c3->value->int32); persist_write_int(MESSAGE_KEY_HourColor, s_day_colors[2].argb); }
@@ -249,7 +246,6 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   Tuple *c6 = dict_find(iter, MESSAGE_KEY_CompFillColor); if(c6) { s_day_colors[5] = GColorFromHEX(c6->value->int32); persist_write_int(MESSAGE_KEY_CompFillColor, s_day_colors[5].argb); }
   Tuple *c7 = dict_find(iter, MESSAGE_KEY_CompTextColor); if(c7) { s_day_colors[6] = GColorFromHEX(c7->value->int32); persist_write_int(MESSAGE_KEY_CompTextColor, s_day_colors[6].argb); }
 
-  // --- NIGHT COLORS ---
   Tuple *n1 = dict_find(iter, MESSAGE_KEY_NightBackgroundColor); if(n1) { s_night_colors[0] = GColorFromHEX(n1->value->int32); persist_write_int(MESSAGE_KEY_NightBackgroundColor, s_night_colors[0].argb); }
   Tuple *n2 = dict_find(iter, MESSAGE_KEY_NightMinuteHandColor); if(n2) { s_night_colors[1] = GColorFromHEX(n2->value->int32); persist_write_int(MESSAGE_KEY_NightMinuteHandColor, s_night_colors[1].argb); }
   Tuple *n3 = dict_find(iter, MESSAGE_KEY_NightHourColor); if(n3) { s_night_colors[2] = GColorFromHEX(n3->value->int32); persist_write_int(MESSAGE_KEY_NightHourColor, s_night_colors[2].argb); }
@@ -258,7 +254,6 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   Tuple *n6 = dict_find(iter, MESSAGE_KEY_NightCompFillColor); if(n6) { s_night_colors[5] = GColorFromHEX(n6->value->int32); persist_write_int(MESSAGE_KEY_NightCompFillColor, s_night_colors[5].argb); }
   Tuple *n7 = dict_find(iter, MESSAGE_KEY_NightCompTextColor); if(n7) { s_night_colors[6] = GColorFromHEX(n7->value->int32); persist_write_int(MESSAGE_KEY_NightCompTextColor, s_night_colors[6].argb); }
 
-  // --- STANDARD STYLES ---
   Tuple *hand_over_t = dict_find(iter, MESSAGE_KEY_HandOverNumbers); if (hand_over_t) { s_hand_over_numbers = hand_over_t->value->int32 == 1 || hand_over_t->value->uint8 == 1; persist_write_bool(MESSAGE_KEY_HandOverNumbers, s_hand_over_numbers); }
   Tuple *show_markers_t = dict_find(iter, MESSAGE_KEY_ShowMinuteMarkers); if (show_markers_t) { s_show_minute_markers = show_markers_t->value->int32 == 1 || show_markers_t->value->uint8 == 1; persist_write_bool(MESSAGE_KEY_ShowMinuteMarkers, s_show_minute_markers); }
   Tuple *hand_length_t = dict_find(iter, MESSAGE_KEY_HandLengthScreenEdge); if (hand_length_t) { s_hand_length_screen_edge = hand_length_t->value->int32 == 1 || hand_length_t->value->uint8 == 1; persist_write_bool(MESSAGE_KEY_HandLengthScreenEdge, s_hand_length_screen_edge); }
@@ -277,10 +272,7 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
 
   update_compass_state();
   precalculate_geometry(); 
-  
-  // Apply Dynamic Theme Logic
   apply_current_theme(); 
-  
   update_cached_data();
   layer_mark_dirty(s_canvas_layer);
 }
@@ -363,7 +355,6 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 
   if (!s_hand_over_numbers) draw_minute_hand(ctx, cx, cy, sin_m, cos_m);
 
-  // --- DRAW FAST-CACHED HOURS ---
   graphics_context_set_text_color(ctx, s_hour_color);
   GFont active_font = (s_hour_style == 1) ? s_time_font_roman : s_time_font_numbers;
   
@@ -377,7 +368,6 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     graphics_draw_text(ctx, s_hour_texts[h], active_font, text_rect, GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
   }
 
-  // --- DRAW ELONGATED TRIANGLE HOUR MARKERS ---
   if (s_hour_position != 0) {
     graphics_context_set_fill_color(ctx, s_marker_color);
     GPath *active_path = s_triangle_path_in;
@@ -392,7 +382,6 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     }
   }
 
-  // --- DRAW FAST-CACHED MINUTE MARKERS ---
   if (s_num_markers > 0) {
     graphics_context_set_stroke_color(ctx, s_marker_color);
     graphics_context_set_fill_color(ctx, s_marker_color);
@@ -416,8 +405,62 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 
   if (s_hand_over_numbers) draw_minute_hand(ctx, cx, cy, sin_m, cos_m);
 
-  // --- DRAW COMPLICATIONS ---
-  if (s_num_comps > 0) {
+  // --- DRAW COMPLICATIONS (HIDDEN IN ZEN MODE) ---
+  if (s_num_comps > 0 && !s_zen_mode) {
+    
+    #if defined(PBL_ROUND)
+    // --- ROUND WATCH OVERHAUL (CHALK & GABBRO PLATFORM) ---
+    // Dynamic floating cluster on the tail of the minute hand!
+    int comp_radius = 24; 
+    int inner_radius = comp_radius - 3;
+    
+    // Calculate the perpendicular angle for side-by-side offsets
+    int32_t perp_angle = minute_angle + (TRIG_MAX_ANGLE / 4);
+    int32_t sin_p = sin_lookup(perp_angle);
+    int32_t cos_p = cos_lookup(perp_angle);
+
+    for (int i = 0; i < s_num_comps; i++) {
+      int offset_along = 0;
+      int offset_perp = 0;
+      
+      // Calculate cluster positions based on how many complications are active
+      if (s_num_comps == 1) {
+        offset_along = -55; // Single comp sits directly on the tail
+      } else if (s_num_comps == 2) {
+        offset_along = -50;
+        offset_perp = (i == 0) ? -26 : 26; // Two comps sit side-by-side
+      } else if (s_num_comps == 3) {
+        // Triangle cluster exactly matching the mockup
+        if (i == 0) { offset_along = -72; offset_perp = 0; }        // Furthest out (tail end)
+        else if (i == 1) { offset_along = -38; offset_perp = -28; } // Closer, shifted left
+        else { offset_along = -38; offset_perp = 28; }              // Closer, shifted right
+      }
+
+      // Calculate final X/Y using both along-hand and perpendicular offsets
+      GPoint comp_center = {
+        .x = center.x + (sin_m * offset_along) / TRIG_MAX_RATIO + (sin_p * offset_perp) / TRIG_MAX_RATIO,
+        .y = center.y - (cos_m * offset_along) / TRIG_MAX_RATIO - (cos_p * offset_perp) / TRIG_MAX_RATIO
+      };
+
+      // Draw the floating complication bubbles
+      graphics_context_set_fill_color(ctx, s_comp_circle_color);
+      graphics_fill_circle(ctx, comp_center, comp_radius);
+      
+      graphics_context_set_fill_color(ctx, s_bg_color);
+      graphics_fill_circle(ctx, comp_center, comp_radius - 2);
+      
+      graphics_context_set_fill_color(ctx, s_comp_fill_color);
+      graphics_fill_circle(ctx, comp_center, inner_radius);
+
+      // Draw the text
+      GRect text_rect = GRect(comp_center.x - comp_radius, comp_center.y - s_comp_y_offset[i] + 2, comp_radius * 2, s_comp_height[i]);
+      graphics_context_set_text_color(ctx, s_comp_text_color); 
+      graphics_draw_text(ctx, s_comp_text[i], s_comp_font[i], text_rect, GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+    }
+    
+    #else
+    // --- RECTANGULAR WATCH (APLITE / BASALT / DIORITE PLATFORM) ---
+    // Classic rotating, mechanically stacked pill
     int comp_radius = 26;
     int inner_radius = comp_radius - 4; 
     int comp_spacing = 40; 
@@ -487,6 +530,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
       graphics_context_set_text_color(ctx, s_comp_text_color); 
       graphics_draw_text(ctx, s_comp_text[i], s_comp_font[i], text_rect, GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
     }
+    #endif
   }
 }
 
@@ -496,9 +540,7 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   s_new_hour = tick_time->tm_hour;
   s_new_minute = tick_time->tm_min;
   
-  // Re-evaluate if we need to swap day/night colors on the minute tick
   apply_current_theme();
-  
   update_cached_data();
   start_minute_animation();
 }
@@ -536,10 +578,11 @@ static void bluetooth_callback(bool connected) {
 static void init() {
   s_main_window = window_create();
   
-// Initialize Theme Logic
+  // --- SUBSCRIBE TO ACCELEROMETER FOR ZEN MODE ---
+  accel_tap_service_subscribe(tap_handler);
+
   s_theme_mode = persist_exists(MESSAGE_KEY_ThemeMode) ? persist_read_int(MESSAGE_KEY_ThemeMode) : 0;
   
-  // Both Manual (1) and Auto API (2) now use the same saved time slots!
   if (s_theme_mode == 1 || s_theme_mode == 2) { 
       if(persist_exists(1001)) s_day_h = persist_read_int(1001);
       if(persist_exists(1002)) s_day_m = persist_read_int(1002);
@@ -547,7 +590,6 @@ static void init() {
       if(persist_exists(1004)) s_night_m = persist_read_int(1004);
   }
 
-  // Load Day Colors
   s_day_colors[0].argb = persist_exists(MESSAGE_KEY_BackgroundColor) ? persist_read_int(MESSAGE_KEY_BackgroundColor) : GColorBlackARGB8;
   s_day_colors[1].argb = persist_exists(MESSAGE_KEY_MinuteHandColor) ? persist_read_int(MESSAGE_KEY_MinuteHandColor) : GColorOrangeARGB8;
   s_day_colors[2].argb = persist_exists(MESSAGE_KEY_HourColor) ? persist_read_int(MESSAGE_KEY_HourColor) : GColorWhiteARGB8;
@@ -556,7 +598,6 @@ static void init() {
   s_day_colors[5].argb = persist_exists(MESSAGE_KEY_CompFillColor) ? persist_read_int(MESSAGE_KEY_CompFillColor) : GColorOrangeARGB8;
   s_day_colors[6].argb = persist_exists(MESSAGE_KEY_CompTextColor) ? persist_read_int(MESSAGE_KEY_CompTextColor) : GColorWhiteARGB8;
 
-  // Load Night Colors
   s_night_colors[0].argb = persist_exists(MESSAGE_KEY_NightBackgroundColor) ? persist_read_int(MESSAGE_KEY_NightBackgroundColor) : GColorBlackARGB8;
   s_night_colors[1].argb = persist_exists(MESSAGE_KEY_NightMinuteHandColor) ? persist_read_int(MESSAGE_KEY_NightMinuteHandColor) : GColorCobaltBlueARGB8;
   s_night_colors[2].argb = persist_exists(MESSAGE_KEY_NightHourColor) ? persist_read_int(MESSAGE_KEY_NightHourColor) : GColorLightGrayARGB8;
@@ -580,7 +621,6 @@ static void init() {
   s_comp_2 = persist_exists(MESSAGE_KEY_Complication2) ? persist_read_int(MESSAGE_KEY_Complication2) : 0; 
   s_comp_3 = persist_exists(MESSAGE_KEY_Complication3) ? persist_read_int(MESSAGE_KEY_Complication3) : 0; 
 
-  // Initialize triangle graphics
   s_triangle_path_out = gpath_create(&TRIANGLE_OUT_INFO);
   s_triangle_path_in = gpath_create(&TRIANGLE_IN_INFO);
 
@@ -606,7 +646,7 @@ static void init() {
 
   update_compass_state();
   precalculate_geometry(); 
-  apply_current_theme(); // Apply the theme BEFORE first draw
+  apply_current_theme(); 
   update_cached_data();
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
@@ -618,13 +658,15 @@ static void init() {
 static void deinit() {
   if (s_minute_animation) animation_destroy(s_minute_animation); 
   
-  // Clean up graphics objects
   gpath_destroy(s_triangle_path_out);
   gpath_destroy(s_triangle_path_in);
   
   window_destroy(s_main_window);
   connection_service_unsubscribe();
   compass_service_unsubscribe(); 
+  
+  // --- UNSUBSCRIBE FROM ZEN MODE ON EXIT ---
+  accel_tap_service_unsubscribe();
 }
 
 int main(void) {

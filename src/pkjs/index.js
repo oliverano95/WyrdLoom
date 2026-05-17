@@ -1,4 +1,4 @@
-var Clay = require('pebble-clay');
+var Clay = require('@rebble/clay');
 
 var clayConfig = [
   { "type": "heading", "defaultValue": "Wyrd Loom Settings" },
