@@ -41,8 +41,9 @@ static bool s_zen_mode = false; // <-- NEW: ZEN MODE STATE
 static int s_hour_style; 
 static int s_hour_position; 
 static int s_marker_interval;
-static int s_marker_style; 
+static int s_marker_style;
 static bool s_smart_markers;
+static bool s_use_24h;
 static int s_comp_1;
 static int s_comp_2;
 static int s_comp_3;
@@ -183,12 +184,24 @@ static void update_cached_data() {
 
   snprintf(s_minute_bubble_text, sizeof(s_minute_bubble_text), "%d", s_new_minute);
 
+  int p_now = ((s_new_hour % 12) + 12) % 12;
   for (int h = 0; h < 12; h++) {
     int display_h = h;
-    if (display_h == 0) display_h = 12; 
-    
-    if (s_hour_style == 1) get_roman_numeral(display_h, s_hour_texts[h]);
-    else snprintf(s_hour_texts[h], sizeof(s_hour_texts[h]), "%d", display_h);
+    if (display_h == 0) display_h = 12;
+
+    if (s_use_24h) {
+      // Center 24h labels on the current hour so numbers stay continuous
+      // around the hand; the wrap seam falls opposite (off-screen).
+      int diff = h - p_now;
+      while (diff > 6) diff -= 12;
+      while (diff <= -6) diff += 12;
+      int hour24 = (((s_new_hour + diff) % 24) + 24) % 24;
+      snprintf(s_hour_texts[h], sizeof(s_hour_texts[h]), "%02d", hour24);
+    } else if (s_hour_style == 1) {
+      get_roman_numeral(display_h, s_hour_texts[h]);
+    } else {
+      snprintf(s_hour_texts[h], sizeof(s_hour_texts[h]), "%d", display_h);
+    }
   }
 
   s_num_comps = 0;
@@ -258,6 +271,7 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   Tuple *show_markers_t = dict_find(iter, MESSAGE_KEY_ShowMinuteMarkers); if (show_markers_t) { s_show_minute_markers = show_markers_t->value->int32 == 1 || show_markers_t->value->uint8 == 1; persist_write_bool(MESSAGE_KEY_ShowMinuteMarkers, s_show_minute_markers); }
   Tuple *hand_length_t = dict_find(iter, MESSAGE_KEY_HandLengthScreenEdge); if (hand_length_t) { s_hand_length_screen_edge = hand_length_t->value->int32 == 1 || hand_length_t->value->uint8 == 1; persist_write_bool(MESSAGE_KEY_HandLengthScreenEdge, s_hand_length_screen_edge); }
   Tuple *show_bubble_t = dict_find(iter, MESSAGE_KEY_ShowMinuteBubble); if (show_bubble_t) { s_show_minute_bubble = show_bubble_t->value->int32 == 1 || show_bubble_t->value->uint8 == 1; persist_write_bool(MESSAGE_KEY_ShowMinuteBubble, s_show_minute_bubble); }
+  Tuple *use24_t = dict_find(iter, MESSAGE_KEY_Use24Hour); if (use24_t) { s_use_24h = use24_t->value->int32 == 1 || use24_t->value->uint8 == 1; persist_write_bool(MESSAGE_KEY_Use24Hour, s_use_24h); }
 
   Tuple *hour_style_t = dict_find(iter, MESSAGE_KEY_HourStyle); if (hour_style_t) { s_hour_style = atoi(hour_style_t->value->cstring); persist_write_int(MESSAGE_KEY_HourStyle, s_hour_style); }
   Tuple *hour_pos_t = dict_find(iter, MESSAGE_KEY_HourPosition); if (hour_pos_t) { s_hour_position = atoi(hour_pos_t->value->cstring); persist_write_int(MESSAGE_KEY_HourPosition, s_hour_position); }
@@ -356,7 +370,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   if (!s_hand_over_numbers) draw_minute_hand(ctx, cx, cy, sin_m, cos_m);
 
   graphics_context_set_text_color(ctx, s_hour_color);
-  GFont active_font = (s_hour_style == 1) ? s_time_font_roman : s_time_font_numbers;
+  GFont active_font = (s_hour_style == 1 && !s_use_24h) ? s_time_font_roman : s_time_font_numbers;
   
   for (int h = 0; h < 12; h++) {
     int32_t text_x = cx + s_hour_offsets[h].x;
@@ -609,7 +623,8 @@ static void init() {
   s_hand_over_numbers = persist_exists(MESSAGE_KEY_HandOverNumbers) ? persist_read_bool(MESSAGE_KEY_HandOverNumbers) : false;
   s_show_minute_markers = persist_exists(MESSAGE_KEY_ShowMinuteMarkers) ? persist_read_bool(MESSAGE_KEY_ShowMinuteMarkers) : true;
   s_hand_length_screen_edge = persist_exists(MESSAGE_KEY_HandLengthScreenEdge) ? persist_read_bool(MESSAGE_KEY_HandLengthScreenEdge) : true;
-  s_show_minute_bubble = persist_exists(MESSAGE_KEY_ShowMinuteBubble) ? persist_read_bool(MESSAGE_KEY_ShowMinuteBubble) : false; 
+  s_show_minute_bubble = persist_exists(MESSAGE_KEY_ShowMinuteBubble) ? persist_read_bool(MESSAGE_KEY_ShowMinuteBubble) : false;
+  s_use_24h = persist_exists(MESSAGE_KEY_Use24Hour) ? persist_read_bool(MESSAGE_KEY_Use24Hour) : false;
   
   s_hour_style = persist_exists(MESSAGE_KEY_HourStyle) ? persist_read_int(MESSAGE_KEY_HourStyle) : 0;
   s_hour_position = persist_exists(MESSAGE_KEY_HourPosition) ? persist_read_int(MESSAGE_KEY_HourPosition) : 0;
