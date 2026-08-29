@@ -215,6 +215,7 @@ static void update_cached_data() {
       case 12: { int cal = (int)health_service_sum_today(HealthMetricActiveKCalories); snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d kc", cal); s_comp_font[i] = s_comp_font_small; s_comp_y_offset[i] = 11; break; }
       case 13: { int act = (int)health_service_sum_today(HealthMetricActiveSeconds); snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d m", act / 60); break; }
       case 14: { CompassHeadingData hdg; compass_service_peek(&hdg); snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%ld°", TRIGANGLE_TO_DEG(hdg.true_heading)); break; }
+      case 16: { struct tm *utc = gmtime(&temp); strftime(s_comp_text[i], sizeof(s_comp_text[i]), "%H", utc); s_comp_font[i] = s_comp_font_large; s_comp_y_offset[i] = 18; tick_time = localtime(&temp); break; }
     }
   }
 }
