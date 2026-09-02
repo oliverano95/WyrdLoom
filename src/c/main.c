@@ -181,7 +181,7 @@ static void update_cached_data() {
   time_t temp = time(NULL);
   struct tm *tick_time = localtime(&temp);
 
-  snprintf(s_minute_bubble_text, sizeof(s_minute_bubble_text), "%d", s_new_minute);
+  snprintf(s_minute_bubble_text, sizeof(s_minute_bubble_text), "%02d", s_new_minute);
 
   for (int h = 0; h < 12; h++) {
     int display_h = h;
