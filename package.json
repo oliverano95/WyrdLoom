@@ -47,7 +47,8 @@
             "NightMinuteMarkerColor",
             "NightCompCircleColor",
             "NightCompFillColor",
-            "NightCompTextColor"
+            "NightCompTextColor",
+            "Use24Hour"
         ],
         "projectType": "native",
         "resources": {

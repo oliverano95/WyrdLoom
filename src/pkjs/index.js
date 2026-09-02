@@ -52,6 +52,7 @@ var clayConfig = [
     "items": [
       { "type": "heading", "defaultValue": "Dial Styling" },
       { "type": "select", "messageKey": "HourStyle", "defaultValue": "0", "label": "Hour Style", "options": [ { "label": "Standard Numbers", "value": "0" }, { "label": "Roman Numerals", "value": "1" } ] },
+      { "type": "toggle", "messageKey": "Use24Hour", "label": "24-hour dial (00-23)", "defaultValue": false },
       { "type": "select", "messageKey": "HourPosition", "defaultValue": "0", "label": "Hour Position", "options": [ { "label": "On Top of Track", "value": "0" }, { "label": "Outside Track", "value": "1" }, { "label": "Inside Track", "value": "2" } ] },
       { "type": "slider", "messageKey": "MinuteMarkerInterval", "defaultValue": 15, "label": "Marker Interval", "min": 5, "max": 30, "step": 1 },
       { "type": "select", "messageKey": "MinuteMarkerStyle", "defaultValue": "2", "label": "Marker Style", "options": [ { "label": "Small Dot", "value": "0" }, { "label": "Big Dot", "value": "1" }, { "label": "Short Line", "value": "2" }, { "label": "Long Line", "value": "3" } ] },
@@ -186,7 +187,7 @@ function customClayJS() {
       'ThemeMode', 'ManualDayTime', 'ManualNightTime',
       'BackgroundColor', 'MinuteHandColor', 'HourColor', 'MinuteMarkerColor', 'CompCircleColor', 'CompFillColor', 'CompTextColor',
       'NightBackgroundColor', 'NightMinuteHandColor', 'NightHourColor', 'NightMinuteMarkerColor', 'NightCompCircleColor', 'NightCompFillColor', 'NightCompTextColor',
-      'HourStyle', 'HourPosition', 'MinuteMarkerInterval', 'MinuteMarkerStyle', 'SmartHierarchicalMarkers',
+      'HourStyle', 'HourPosition', 'MinuteMarkerInterval', 'MinuteMarkerStyle', 'SmartHierarchicalMarkers', 'Use24Hour',
       'Complication1', 'Complication2', 'Complication3',
       'BTDisconnectPattern', 'ShowMinuteBubble', 'HandOverNumbers', 'ShowMinuteMarkers', 'HandLengthScreenEdge'
     ];
@@ -210,7 +211,7 @@ function customClayJS() {
           "ThemeMode": "0", "ManualDayTime": "07:00", "ManualNightTime": "19:00",
           "BackgroundColor": "0x000000", "MinuteHandColor": "0xFF5500", "HourColor": "0xFFFFFF", "MinuteMarkerColor": "0xAAAAAA", "CompCircleColor": "0xFF5500", "CompFillColor": "0xFF5500", "CompTextColor": "0xFFFFFF",
           "NightBackgroundColor": "0x000000", "NightMinuteHandColor": "0x0055AA", "NightHourColor": "0xAAAAAA", "NightMinuteMarkerColor": "0x555555", "NightCompCircleColor": "0x0055AA", "NightCompFillColor": "0x0055AA", "NightCompTextColor": "0xAAAAAA",
-          "HourStyle": "0", "HourPosition": "0", "MinuteMarkerInterval": 15, "MinuteMarkerStyle": "2", "SmartHierarchicalMarkers": true,
+          "HourStyle": "0", "HourPosition": "0", "MinuteMarkerInterval": 15, "MinuteMarkerStyle": "2", "SmartHierarchicalMarkers": true, "Use24Hour": false,
           "Complication1": "3", "Complication2": "0", "Complication3": "0",
           "BTDisconnectPattern": "2", "ShowMinuteBubble": false, "HandOverNumbers": true, "ShowMinuteMarkers": true, "HandLengthScreenEdge": true
         };
