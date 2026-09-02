@@ -34,8 +34,7 @@ static bool s_hand_over_numbers;
 static bool s_show_minute_markers;
 static bool s_hand_length_screen_edge;
 static bool s_show_minute_bubble;
-static int s_bt_pattern; 
-static bool s_zen_mode = false; // <-- NEW: ZEN MODE STATE
+static int s_bt_pattern;
 
 // --- STYLING STATE VARIABLES ---
 static int s_hour_style; 
@@ -77,13 +76,6 @@ static GPath *s_triangle_path_out = NULL;
 static GPath *s_triangle_path_in = NULL;
 static const GPathInfo TRIANGLE_OUT_INFO = { .num_points = 3, .points = (GPoint []) {{-6, 16}, {6, 16}, {0, -4}} };
 static const GPathInfo TRIANGLE_IN_INFO = { .num_points = 3, .points = (GPoint []) {{-6, -4}, {6, -4}, {0, 16}} };
-
-// --- NEW: ACCELEROMETER HANDLER (ZEN MODE) ---
-static void tap_handler(AccelAxisType axis, int32_t direction) {
-  // Toggle Zen Mode on flick
-  s_zen_mode = !s_zen_mode;
-  layer_mark_dirty(s_canvas_layer);
-}
 
 static void compass_handler(CompassHeadingData heading_data) {}
 
@@ -407,8 +399,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 
   if (s_hand_over_numbers) draw_minute_hand(ctx, cx, cy, sin_m, cos_m);
 
-  // --- DRAW COMPLICATIONS (HIDDEN IN ZEN MODE) ---
-  if (s_num_comps > 0 && !s_zen_mode) {
+  // --- DRAW COMPLICATIONS ---
+  if (s_num_comps > 0) {
     
     #if defined(PBL_ROUND)
     // --- ROUND WATCH OVERHAUL (CHALK & GABBRO PLATFORM) ---
@@ -579,9 +571,6 @@ static void bluetooth_callback(bool connected) {
 
 static void init() {
   s_main_window = window_create();
-  
-  // --- SUBSCRIBE TO ACCELEROMETER FOR ZEN MODE ---
-  accel_tap_service_subscribe(tap_handler);
 
   s_theme_mode = persist_exists(MESSAGE_KEY_ThemeMode) ? persist_read_int(MESSAGE_KEY_ThemeMode) : 0;
   
@@ -665,10 +654,7 @@ static void deinit() {
   
   window_destroy(s_main_window);
   connection_service_unsubscribe();
-  compass_service_unsubscribe(); 
-  
-  // --- UNSUBSCRIBE FROM ZEN MODE ON EXIT ---
-  accel_tap_service_unsubscribe();
+  compass_service_unsubscribe();
 }
 
 int main(void) {
