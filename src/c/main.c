@@ -35,6 +35,8 @@ static bool s_show_minute_markers;
 static bool s_hand_length_screen_edge;
 static bool s_show_minute_bubble;
 static int s_bt_pattern;
+static GColor s_bt_disconnect_color;
+static bool s_bt_disconnected = false;
 
 // --- STYLING STATE VARIABLES ---
 static int s_hour_style; 
@@ -47,11 +49,7 @@ static int s_comp_1;
 static int s_comp_2;
 static int s_comp_3;
 
-// --- ANIMATION STATE VARIABLES ---
-static Animation *s_minute_animation = NULL;
-static int32_t s_anim_progress = 1000;
-static int s_old_hour = -1;
-static int s_old_minute = -1;
+// --- TIME STATE VARIABLES ---
 static int s_new_hour = -1;
 static int s_new_minute = -1;
 
@@ -64,6 +62,14 @@ static int s_comp_y_offset[3];
 static int s_comp_height[3];
 static int s_active_comps[3];
 static int s_num_comps = 0;
+
+// --- HEALTH DATA CACHE (throttled to ~5 minute refreshes) ---
+static int s_cached_steps = -1;
+static int s_cached_dist_m = -1;
+static int s_cached_calories = -1;
+static int s_cached_active_s = -1;
+static int s_cached_hr_bpm = -1;
+static time_t s_health_last_refresh = 0;
 
 // --- PRECALCULATED GEOMETRY ---
 static GPoint s_hour_offsets[12];
@@ -82,7 +88,7 @@ static void compass_handler(CompassHeadingData heading_data) {}
 
 static void update_compass_state() {
   if (s_comp_1 == 14 || s_comp_2 == 14 || s_comp_3 == 14) {
-    compass_service_set_heading_filter(TRIG_MAX_ANGLE); 
+    compass_service_set_heading_filter(TRIG_MAX_ANGLE / 4); 
     compass_service_subscribe(compass_handler);
   } else {
     compass_service_unsubscribe();
@@ -90,7 +96,7 @@ static void update_compass_state() {
 }
 
 static void get_roman_numeral(int num, char* buffer) {
-  const char* romans[] = {"", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"};
+  static const char* romans[] = {"", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"};
   if (num >= 1 && num <= 12) strcpy(buffer, romans[num]);
   else strcpy(buffer, "");
 }
@@ -120,6 +126,10 @@ static void apply_current_theme() {
     s_bg_color = s_night_colors[0]; s_minute_hand_color = s_night_colors[1]; s_hour_color = s_night_colors[2];
     s_marker_color = s_night_colors[3]; s_comp_circle_color = s_night_colors[4]; s_comp_fill_color = s_night_colors[5]; s_comp_text_color = s_night_colors[6];
   }
+}
+
+static GColor get_background_color(void) {
+  return s_bt_disconnected ? s_bt_disconnect_color : s_bg_color;
 }
 
 static void precalculate_geometry() {
@@ -158,10 +168,12 @@ static void precalculate_geometry() {
         int32_t r_inner = (style == 2) ? VIRTUAL_CLOCK_RADIUS - 6 : VIRTUAL_CLOCK_RADIUS - 12;
         if (style == 0 || style == 1) r_inner = r_outer - ((style == 0) ? 2 : 4); 
 
-        s_marker_outer_offsets[s_num_markers].x = (sin_lookup(angle) * r_outer) / TRIG_MAX_RATIO;
-        s_marker_outer_offsets[s_num_markers].y = -(cos_lookup(angle) * r_outer) / TRIG_MAX_RATIO;
-        s_marker_inner_offsets[s_num_markers].x = (sin_lookup(angle) * r_inner) / TRIG_MAX_RATIO;
-        s_marker_inner_offsets[s_num_markers].y = -(cos_lookup(angle) * r_inner) / TRIG_MAX_RATIO;
+        int32_t sin_a = sin_lookup(angle);
+        int32_t cos_a = cos_lookup(angle);
+        s_marker_outer_offsets[s_num_markers].x = (sin_a * r_outer) / TRIG_MAX_RATIO;
+        s_marker_outer_offsets[s_num_markers].y = -(cos_a * r_outer) / TRIG_MAX_RATIO;
+        s_marker_inner_offsets[s_num_markers].x = (sin_a * r_inner) / TRIG_MAX_RATIO;
+        s_marker_inner_offsets[s_num_markers].y = -(cos_a * r_inner) / TRIG_MAX_RATIO;
         s_marker_styles[s_num_markers] = style;
         
         s_num_markers++;
@@ -170,10 +182,25 @@ static void precalculate_geometry() {
   }
 }
 
-static void update_cached_data() {
-  time_t temp = time(NULL);
-  struct tm *tick_time = localtime(&temp);
+static void refresh_health_cache(void) {
+  time_t now = time(NULL);
+  time_t elapsed = now - s_health_last_refresh;
+  if (s_health_last_refresh != 0 && elapsed >= 0 && elapsed < 300) return;
+  s_health_last_refresh = now;
 
+  for (int i = 0; i < s_num_comps; i++) {
+    switch (s_active_comps[i]) {
+      case 1:  s_cached_steps   = (int)health_service_sum_today(HealthMetricStepCount); break;
+      case 6:  s_cached_hr_bpm   = (int)health_service_peek_current_value(HealthMetricHeartRateBPM); break;
+      case 11: s_cached_dist_m   = (int)health_service_sum_today(HealthMetricWalkedDistanceMeters); break;
+      case 12: s_cached_calories = (int)health_service_sum_today(HealthMetricActiveKCalories); break;
+      case 13: s_cached_active_s = (int)health_service_sum_today(HealthMetricActiveSeconds); break;
+      default: break;
+    }
+  }
+}
+
+static void update_cached_data(struct tm *tick_time) {
   snprintf(s_minute_bubble_text, sizeof(s_minute_bubble_text), "%02d", s_new_minute);
 
   int p_now = ((s_new_hour % 12) + 12) % 12;
@@ -201,27 +228,29 @@ static void update_cached_data() {
   if (s_comp_2 != 0) s_active_comps[s_num_comps++] = s_comp_2;
   if (s_comp_3 != 0) s_active_comps[s_num_comps++] = s_comp_3;
 
+  refresh_health_cache();
+
   for (int i = 0; i < s_num_comps; i++) {
     s_comp_font[i] = s_comp_font_medium;
     s_comp_y_offset[i] = 14;
     s_comp_height[i] = 32;
 
     switch(s_active_comps[i]) {
-      case 1: { int steps = (int)health_service_sum_today(HealthMetricStepCount); if (steps < 1000) { snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d", steps); s_comp_font[i] = s_comp_font_large; s_comp_y_offset[i] = 18; } else if (steps < 10000) { snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d.%dk", steps / 1000, (steps % 1000) / 100); } else { snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%dk", steps / 1000); } break; }
+      case 1: { int steps = s_cached_steps; if (steps < 1000) { snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d", steps); s_comp_font[i] = s_comp_font_large; s_comp_y_offset[i] = 18; } else if (steps < 10000) { snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d.%dk", steps / 1000, (steps % 1000) / 100); } else { snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%dk", steps / 1000); } break; }
       case 2: strftime(s_comp_text[i], sizeof(s_comp_text[i]), "%d\n%b", tick_time); s_comp_font[i] = s_comp_font_small; s_comp_y_offset[i] = 19; s_comp_height[i] = 40; break;
       case 3: strftime(s_comp_text[i], sizeof(s_comp_text[i]), "%d", tick_time); s_comp_font[i] = s_comp_font_large; s_comp_y_offset[i] = 18; break;
       case 5: snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d%%", battery_state_service_peek().charge_percent); break;
-      case 6: snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d", (int)health_service_peek_current_value(HealthMetricHeartRateBPM)); s_comp_font[i] = s_comp_font_large; s_comp_y_offset[i] = 18; break;
+      case 6: snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d", s_cached_hr_bpm); s_comp_font[i] = s_comp_font_large; s_comp_y_offset[i] = 18; break;
       case 7: strftime(s_comp_text[i], sizeof(s_comp_text[i]), "%a", tick_time); break;
       case 8: strftime(s_comp_text[i], sizeof(s_comp_text[i]), "%p", tick_time); break;
       case 9: strftime(s_comp_text[i], sizeof(s_comp_text[i]), "Wk %V", tick_time); s_comp_font[i] = s_comp_font_small; s_comp_y_offset[i] = 11; break;
       case 10: strftime(s_comp_text[i], sizeof(s_comp_text[i]), "%Y", tick_time); break;
-      case 11: { int dist = (int)health_service_sum_today(HealthMetricWalkedDistanceMeters); snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d.%d km", dist / 1000, (dist % 1000) / 100); s_comp_font[i] = s_comp_font_small; s_comp_y_offset[i] = 11; break; }
-      case 12: { int cal = (int)health_service_sum_today(HealthMetricActiveKCalories); snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d kc", cal); s_comp_font[i] = s_comp_font_small; s_comp_y_offset[i] = 11; break; }
-      case 13: { int act = (int)health_service_sum_today(HealthMetricActiveSeconds); snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d m", act / 60); break; }
-      case 14: { CompassHeadingData hdg; compass_service_peek(&hdg); snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%ld°", TRIGANGLE_TO_DEG(hdg.true_heading)); break; }
+      case 11: { int dist = s_cached_dist_m; snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d.%d km", dist / 1000, (dist % 1000) / 100); s_comp_font[i] = s_comp_font_small; s_comp_y_offset[i] = 11; break; }
+      case 12: { int cal = s_cached_calories; snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d kc", cal); s_comp_font[i] = s_comp_font_small; s_comp_y_offset[i] = 11; break; }
+      case 13: { int act = s_cached_active_s; snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d m", act / 60); break; }
+      case 14: { CompassHeadingData hdg; compass_service_peek(&hdg); snprintf(s_comp_text[i], sizeof(s_comp_text[i]), "%d°", (int)TRIGANGLE_TO_DEG(hdg.true_heading)); break; }
       case 15: strftime(s_comp_text[i], sizeof(s_comp_text[i]), "%a\n%d", tick_time); s_comp_font[i] = s_comp_font_small; s_comp_y_offset[i] = 19; s_comp_height[i] = 40; break;
-      case 16: { struct tm *utc = gmtime(&temp); strftime(s_comp_text[i], sizeof(s_comp_text[i]), "%H", utc); s_comp_font[i] = s_comp_font_large; s_comp_y_offset[i] = 18; tick_time = localtime(&temp); break; }
+      case 16: { time_t now = time(NULL); struct tm *utc = gmtime(&now); strftime(s_comp_text[i], sizeof(s_comp_text[i]), "%H", utc); s_comp_font[i] = s_comp_font_large; s_comp_y_offset[i] = 18; break; }
     }
   }
 }
@@ -273,38 +302,22 @@ static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   Tuple *marker_style_t = dict_find(iter, MESSAGE_KEY_MinuteMarkerStyle); if (marker_style_t) { s_marker_style = atoi(marker_style_t->value->cstring); persist_write_int(MESSAGE_KEY_MinuteMarkerStyle, s_marker_style); }
   Tuple *smart_markers_t = dict_find(iter, MESSAGE_KEY_SmartHierarchicalMarkers); if (smart_markers_t) { s_smart_markers = smart_markers_t->value->int32 == 1 || smart_markers_t->value->uint8 == 1; persist_write_bool(MESSAGE_KEY_SmartHierarchicalMarkers, s_smart_markers); }
   Tuple *bt_t = dict_find(iter, MESSAGE_KEY_BTDisconnectPattern); if (bt_t) { s_bt_pattern = atoi(bt_t->value->cstring); persist_write_int(MESSAGE_KEY_BTDisconnectPattern, s_bt_pattern); }
+  Tuple *bt_color_t = dict_find(iter, MESSAGE_KEY_BTDisconnectColor); if (bt_color_t) { s_bt_disconnect_color = GColorFromHEX(bt_color_t->value->int32); persist_write_int(MESSAGE_KEY_BTDisconnectColor, s_bt_disconnect_color.argb); }
   
   Tuple *c1_t = dict_find(iter, MESSAGE_KEY_Complication1); if (c1_t) { s_comp_1 = atoi(c1_t->value->cstring); persist_write_int(MESSAGE_KEY_Complication1, s_comp_1); }
   Tuple *c2_t = dict_find(iter, MESSAGE_KEY_Complication2); if (c2_t) { s_comp_2 = atoi(c2_t->value->cstring); persist_write_int(MESSAGE_KEY_Complication2, s_comp_2); }
   Tuple *c3_t = dict_find(iter, MESSAGE_KEY_Complication3); if (c3_t) { s_comp_3 = atoi(c3_t->value->cstring); persist_write_int(MESSAGE_KEY_Complication3, s_comp_3); }
 
   update_compass_state();
-  precalculate_geometry(); 
-  apply_current_theme(); 
-  update_cached_data();
+  if (show_markers_t || hour_pos_t || interval_t || marker_style_t || smart_markers_t) {
+    precalculate_geometry();
+  }
+  apply_current_theme();
+  s_health_last_refresh = 0; // force a health refresh after any settings change
+  time_t temp = time(NULL);
+  struct tm local_tm = *localtime(&temp);
+  update_cached_data(&local_tm);
   layer_mark_dirty(s_canvas_layer);
-}
-
-static void anim_update_proc(Animation *animation, AnimationProgress progress) {
-  s_anim_progress = ((int32_t)progress * 1000) / ANIMATION_NORMALIZED_MAX;
-  layer_mark_dirty(s_canvas_layer);
-}
-
-static void anim_stopped_handler(Animation *animation, bool finished, void *context) {
-  animation_destroy(animation);
-  s_minute_animation = NULL; 
-}
-
-static AnimationImplementation s_anim_impl = { .update = anim_update_proc };
-
-static void start_minute_animation() {
-  if (s_minute_animation) { animation_unschedule(s_minute_animation); }
-  s_minute_animation = animation_create();
-  animation_set_duration(s_minute_animation, 800); 
-  animation_set_curve(s_minute_animation, AnimationCurveEaseInOut); 
-  animation_set_implementation(s_minute_animation, &s_anim_impl);
-  animation_set_handlers(s_minute_animation, (AnimationHandlers) { .stopped = anim_stopped_handler }, NULL);
-  animation_schedule(s_minute_animation);
 }
 
 static void draw_minute_hand(GContext *ctx, int32_t cx, int32_t cy, int32_t sin_m, int32_t cos_m) {
@@ -323,7 +336,7 @@ static void draw_minute_hand(GContext *ctx, int32_t cx, int32_t cy, int32_t sin_
     GPoint bubble_center = GPoint(cx + (sin_m * VIRTUAL_CLOCK_RADIUS) / TRIG_MAX_RATIO, cy - (cos_m * VIRTUAL_CLOCK_RADIUS) / TRIG_MAX_RATIO);
     int bubble_radius = 16;
     
-    graphics_context_set_fill_color(ctx, s_bg_color);
+    graphics_context_set_fill_color(ctx, get_background_color());
     graphics_fill_circle(ctx, bubble_center, bubble_radius);
     graphics_context_set_stroke_color(ctx, s_minute_hand_color);
     graphics_context_set_stroke_width(ctx, 2);
@@ -337,23 +350,14 @@ static void draw_minute_hand(GContext *ctx, int32_t cx, int32_t cy, int32_t sin_
 
 static void canvas_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
-  graphics_context_set_fill_color(ctx, s_bg_color);
+  graphics_context_set_fill_color(ctx, get_background_color());
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
   GPoint center = grect_center_point(&bounds);
   int cull_w = bounds.size.w + 40;
   int cull_h = bounds.size.h + 40;
 
-  int32_t old_h_12 = s_old_hour % 12;
-  int32_t new_h_12 = s_new_hour % 12;
-  int32_t old_angle = ((old_h_12 * 60) + s_old_minute) * TRIG_MAX_ANGLE / 720;
-  int32_t new_angle = ((new_h_12 * 60) + s_new_minute) * TRIG_MAX_ANGLE / 720;
-  
-  if (old_h_12 == 11 && new_h_12 == 0) new_angle += TRIG_MAX_ANGLE;
-  else if (old_h_12 == 0 && new_h_12 == 11) old_angle += TRIG_MAX_ANGLE;
-
-  int32_t interpolated_angle = old_angle + ((new_angle - old_angle) * s_anim_progress) / 1000;
-  int32_t minute_angle = interpolated_angle % TRIG_MAX_ANGLE;
+  int32_t minute_angle = ((s_new_hour % 12) * 60 + s_new_minute) * TRIG_MAX_ANGLE / 720;
 
   int32_t sin_m = sin_lookup(minute_angle);
   int32_t cos_m = cos_lookup(minute_angle);
@@ -454,7 +458,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
       graphics_context_set_fill_color(ctx, s_comp_circle_color);
       graphics_fill_circle(ctx, comp_center, comp_radius);
       
-      graphics_context_set_fill_color(ctx, s_bg_color);
+      graphics_context_set_fill_color(ctx, get_background_color());
       graphics_fill_circle(ctx, comp_center, comp_radius - 2);
       
       graphics_context_set_fill_color(ctx, s_comp_fill_color);
@@ -480,10 +484,10 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     GPoint p_start = { .x = center.x + (sin_m * (pill_offset + start_offset)) / TRIG_MAX_RATIO, .y = center.y - (cos_m * (pill_offset + start_offset)) / TRIG_MAX_RATIO };
     GPoint p_end = { .x = center.x + (sin_m * (pill_offset + end_offset)) / TRIG_MAX_RATIO, .y = center.y - (cos_m * (pill_offset + end_offset)) / TRIG_MAX_RATIO };
 
-    graphics_context_set_fill_color(ctx, s_bg_color);
+    graphics_context_set_fill_color(ctx, get_background_color());
     graphics_fill_circle(ctx, p_start, comp_radius);
     graphics_fill_circle(ctx, p_end, comp_radius);
-    graphics_context_set_stroke_color(ctx, s_bg_color);
+    graphics_context_set_stroke_color(ctx, get_background_color());
     graphics_context_set_stroke_width(ctx, comp_radius * 2);
     if (s_num_comps > 1) graphics_draw_line(ctx, p_start, p_end);
 
@@ -494,10 +498,10 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     graphics_context_set_stroke_width(ctx, comp_radius * 2);
     if (s_num_comps > 1) graphics_draw_line(ctx, p_start, p_end);
 
-    graphics_context_set_fill_color(ctx, s_bg_color);
+    graphics_context_set_fill_color(ctx, get_background_color());
     graphics_fill_circle(ctx, p_start, comp_radius - 2);
     graphics_fill_circle(ctx, p_end, comp_radius - 2);
-    graphics_context_set_stroke_color(ctx, s_bg_color);
+    graphics_context_set_stroke_color(ctx, get_background_color());
     graphics_context_set_stroke_width(ctx, (comp_radius - 2) * 2);
     if (s_num_comps > 1) graphics_draw_line(ctx, p_start, p_end);
 
@@ -513,7 +517,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
       int32_t sin_p = sin_lookup(perp_angle);
       int32_t cos_p = cos_lookup(perp_angle);
 
-      graphics_context_set_stroke_color(ctx, s_bg_color);
+      graphics_context_set_stroke_color(ctx, get_background_color());
       graphics_context_set_stroke_width(ctx, 3); 
 
       for (int i = 0; i < s_num_comps - 1; i++) {
@@ -543,14 +547,12 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 }
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
-  s_old_hour = s_new_hour;
-  s_old_minute = s_new_minute;
   s_new_hour = tick_time->tm_hour;
   s_new_minute = tick_time->tm_min;
-  
+
   apply_current_theme();
-  update_cached_data();
-  start_minute_animation();
+  update_cached_data(tick_time);
+  if (s_canvas_layer) layer_mark_dirty(s_canvas_layer);
 }
 
 static void main_window_load(Window *window) {
@@ -570,9 +572,12 @@ static void main_window_load(Window *window) {
 
 static void main_window_unload(Window *window) {
   layer_destroy(s_canvas_layer);
+  s_canvas_layer = NULL;
 }
 
 static void bluetooth_callback(bool connected) {
+  s_bt_disconnected = !connected;
+
   if (!connected) {
     switch(s_bt_pattern) {
       case 1: vibes_short_pulse(); break;
@@ -581,6 +586,8 @@ static void bluetooth_callback(bool connected) {
       default: break; 
     }
   }
+
+  if (s_canvas_layer) layer_mark_dirty(s_canvas_layer);
 }
 
 static void init() {
@@ -633,7 +640,7 @@ static void init() {
   window_set_background_color(s_main_window, s_bg_color);
 
   app_message_register_inbox_received(inbox_received_handler);
-  app_message_open(512, 512); 
+  app_message_open(1024, 1024); 
 
   window_set_window_handlers(s_main_window, (WindowHandlers) {
     .load = main_window_load,
@@ -643,27 +650,25 @@ static void init() {
   window_stack_push(s_main_window, true);
   
   time_t temp = time(NULL);
-  struct tm *tick_time = localtime(&temp);
-  s_new_hour = tick_time->tm_hour;
-  s_new_minute = tick_time->tm_min;
-  s_old_hour = s_new_hour;
-  s_old_minute = s_new_minute;
-  s_anim_progress = 1000; 
+  struct tm local_tm = *localtime(&temp);
+  s_new_hour = local_tm.tm_hour;
+  s_new_minute = local_tm.tm_min;
 
   update_compass_state();
   precalculate_geometry(); 
   apply_current_theme(); 
-  update_cached_data();
+  update_cached_data(&local_tm);
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
   
+  s_bt_disconnect_color.argb = persist_exists(MESSAGE_KEY_BTDisconnectColor) ? persist_read_int(MESSAGE_KEY_BTDisconnectColor) : GColorRedARGB8;
   s_bt_pattern = persist_exists(MESSAGE_KEY_BTDisconnectPattern) ? persist_read_int(MESSAGE_KEY_BTDisconnectPattern) : 2;
+  s_bt_disconnected = !connection_service_peek_pebble_app_connection();
   connection_service_subscribe((ConnectionHandlers) { .pebble_app_connection_handler = bluetooth_callback });
+  if (s_canvas_layer) layer_mark_dirty(s_canvas_layer);
 }
 
 static void deinit() {
-  if (s_minute_animation) animation_destroy(s_minute_animation); 
-  
   gpath_destroy(s_triangle_path_out);
   gpath_destroy(s_triangle_path_in);
   

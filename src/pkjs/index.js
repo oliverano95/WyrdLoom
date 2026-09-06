@@ -73,6 +73,7 @@ var clayConfig = [
     "items": [
       { "type": "heading", "defaultValue": "Behavior" },
       { "type": "select", "messageKey": "BTDisconnectPattern", "defaultValue": "2", "label": "BT Disconnect Alert", "options": [ { "label": "None", "value": "0" }, { "label": "Short Pulse", "value": "1" }, { "label": "Double Pulse", "value": "2" }, { "label": "Long Pulse", "value": "3" } ] },
+      { "type": "color", "messageKey": "BTDisconnectColor", "defaultValue": "0xFF0000", "label": "BT Disconnect Background" },
       { "type": "toggle", "messageKey": "ShowMinuteBubble", "label": "Show minute bubble", "defaultValue": false },
       { "type": "toggle", "messageKey": "HandOverNumbers", "label": "Hand over numbers", "defaultValue": true },
       { "type": "toggle", "messageKey": "ShowMinuteMarkers", "label": "Show minute markers", "defaultValue": true },
@@ -189,7 +190,7 @@ function customClayJS() {
       'NightBackgroundColor', 'NightMinuteHandColor', 'NightHourColor', 'NightMinuteMarkerColor', 'NightCompCircleColor', 'NightCompFillColor', 'NightCompTextColor',
       'HourStyle', 'HourPosition', 'MinuteMarkerInterval', 'MinuteMarkerStyle', 'SmartHierarchicalMarkers', 'Use24Hour',
       'Complication1', 'Complication2', 'Complication3',
-      'BTDisconnectPattern', 'ShowMinuteBubble', 'HandOverNumbers', 'ShowMinuteMarkers', 'HandLengthScreenEdge'
+      'BTDisconnectPattern', 'BTDisconnectColor', 'ShowMinuteBubble', 'HandOverNumbers', 'ShowMinuteMarkers', 'HandLengthScreenEdge'
     ];
 
     if (btnRandomize) {
@@ -213,7 +214,7 @@ function customClayJS() {
           "NightBackgroundColor": "0x000000", "NightMinuteHandColor": "0x0055AA", "NightHourColor": "0xAAAAAA", "NightMinuteMarkerColor": "0x555555", "NightCompCircleColor": "0x0055AA", "NightCompFillColor": "0x0055AA", "NightCompTextColor": "0xAAAAAA",
           "HourStyle": "0", "HourPosition": "0", "MinuteMarkerInterval": 15, "MinuteMarkerStyle": "2", "SmartHierarchicalMarkers": true, "Use24Hour": false,
           "Complication1": "3", "Complication2": "0", "Complication3": "0",
-          "BTDisconnectPattern": "2", "ShowMinuteBubble": false, "HandOverNumbers": true, "ShowMinuteMarkers": true, "HandLengthScreenEdge": true
+          "BTDisconnectPattern": "2", "BTDisconnectColor": "0xFF0000", "ShowMinuteBubble": false, "HandOverNumbers": true, "ShowMinuteMarkers": true, "HandLengthScreenEdge": true
         };
         Object.keys(defaultSettings).forEach(function(key) {
           var item = clayConfig.getItemByMessageKey(key);
